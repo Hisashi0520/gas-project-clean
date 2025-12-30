@@ -1,6 +1,12 @@
 <script>
 /**
- * 月報管理システム v1.6.0 - JavaScript
+ * 月報管理システム v1.7.0 - JavaScript
+ *
+ * 【v1.7.0 変更内容】
+ * - 添付ファイルの複数アップロードに対応
+ *   - 1つの質問に複数ファイルを添付可能
+ *   - 添付ファイルの個別削除機能
+ *   - ドラッグ&ドロップ風のUI
  *
  * 【v1.6.0 変更内容】
  * - 過去の月報表示機能を改善
@@ -15,7 +21,7 @@
 // グローバル変数
 let currentUser = null;
 let currentTemplate = [];
-let attachmentData = {};
+let attachmentData = {}; // { index: [{data: base64, name: fileName}, ...] }
 let currentReportStatus = null;
 
 // ===== 初期化 =====
@@ -293,48 +299,133 @@ function renderQuestions(template, existingData) {
   const container = document.getElementById('questionsContainer');
   container.innerHTML = '';
   attachmentData = {};
-  
+
   template.forEach((q, index) => {
     const existingAnswer = existingData.find(d => d.questionNo === q.questionNo);
-    
+
+    // 既存の添付ファイル情報を表示用にパース
+    let existingAttachmentHtml = '';
+    if (existingAnswer && existingAnswer.attachmentUrl) {
+      existingAttachmentHtml = `<div class="existing-attachment">📎 添付済み: <a href="${existingAnswer.attachmentUrl}" target="_blank">ファイルを開く</a></div>`;
+    }
+
     const html = `
       <div class="question-item">
         <div class="question-title">${q.title}</div>
         <div class="question-description">${q.description}</div>
-        
+
         <div class="form-group">
           <label>回答</label>
           <textarea id="answer_${index}" placeholder="内容を入力してください。">${existingAnswer ? existingAnswer.answer : ''}</textarea>
         </div>
-        
+
         ${q.allowAttachment ? `
-        <div class="file-upload">
-          <input type="file" id="file_${index}" onchange="handleFileSelect(${index}, this)">
-          <label for="file_${index}">📎 ファイルを添付する</label>
-          <div class="file-name" id="fileName_${index}">${existingAnswer && existingAnswer.attachmentUrl ? '添付済み: ' + existingAnswer.attachmentUrl : ''}</div>
+        <div class="file-upload" id="fileUpload_${index}">
+          <input type="file" id="file_${index}" multiple onchange="handleFileSelect(${index}, this)">
+          <label for="file_${index}">📎 ファイルを添付する（複数選択可）</label>
+          ${existingAttachmentHtml}
+          <div class="file-list" id="fileList_${index}"></div>
         </div>
         ` : ''}
       </div>
     `;
-    
+
     container.innerHTML += html;
   });
 }
 
 function handleFileSelect(index, input) {
-  const file = input.files[0];
-  if (file) {
+  const files = input.files;
+  if (files.length === 0) return;
+
+  // 初期化（まだ配列がなければ作成）
+  if (!attachmentData[index]) {
+    attachmentData[index] = [];
+  }
+
+  // 各ファイルを読み込み
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
     const reader = new FileReader();
+
     reader.onload = function(e) {
       const base64 = e.target.result.split(',')[1];
-      attachmentData[index] = {
+      attachmentData[index].push({
         data: base64,
         name: file.name
-      };
-      document.getElementById('fileName_' + index).textContent = '選択中: ' + file.name;
+      });
+      // ファイルリストを更新
+      renderFileList(index);
     };
+
     reader.readAsDataURL(file);
   }
+
+  // inputをリセット（同じファイルを再度選択できるように）
+  input.value = '';
+}
+
+function renderFileList(index) {
+  const container = document.getElementById('fileList_' + index);
+  if (!container) return;
+
+  const files = attachmentData[index] || [];
+
+  if (files.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="selected-files">';
+  html += `<div class="selected-files-header">選択中のファイル（${files.length}件）</div>`;
+
+  files.forEach((file, fileIndex) => {
+    html += `
+      <div class="selected-file-item">
+        <span class="file-icon">📄</span>
+        <span class="file-name-text">${escapeHtml(file.name)}</span>
+        <button type="button" class="btn-remove-file" onclick="removeFile(${index}, ${fileIndex})">✕</button>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function removeFile(questionIndex, fileIndex) {
+  if (attachmentData[questionIndex]) {
+    attachmentData[questionIndex].splice(fileIndex, 1);
+    renderFileList(questionIndex);
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// 複数添付ファイルのリンクHTMLを生成
+function renderAttachmentLinks(attachmentUrl) {
+  if (!attachmentUrl) return '';
+
+  // カンマ区切りで分割（空白を含む場合もトリム）
+  const urls = attachmentUrl.split(' , ').map(u => u.trim()).filter(u => u);
+
+  if (urls.length === 0) return '';
+
+  if (urls.length === 1) {
+    return `<div class="report-attachment"><a href="${urls[0]}" target="_blank">📎 添付ファイルを開く</a></div>`;
+  }
+
+  // 複数ファイルの場合
+  let html = '<div class="report-attachment"><span>📎 添付ファイル:</span><ul class="attachment-list">';
+  urls.forEach((url, idx) => {
+    html += `<li><a href="${url}" target="_blank">ファイル ${idx + 1}</a></li>`;
+  });
+  html += '</ul></div>';
+  return html;
 }
 
 // ===== 保存・提出 =====
@@ -364,44 +455,51 @@ function saveReport(status) {
 
 async function processAnswersWithAttachments(yearMonth, status) {
   const answers = [];
-  
+
   for (let i = 0; i < currentTemplate.length; i++) {
     const q = currentTemplate[i];
     const answerText = document.getElementById('answer_' + i).value;
-    
-    let attachmentUrl = '';
-    let attachmentText = '';
-    
-    if (attachmentData[i]) {
+
+    let attachmentUrls = [];
+    let attachmentTexts = [];
+
+    // 複数ファイル対応: attachmentData[i]は配列
+    const files = attachmentData[i] || [];
+
+    for (let j = 0; j < files.length; j++) {
+      const file = files[j];
       try {
         const result = await new Promise((resolve, reject) => {
           google.script.run
             .withSuccessHandler(resolve)
             .withFailureHandler(reject)
             .saveAttachment(
-              attachmentData[i].data,
-              attachmentData[i].name,
+              file.data,
+              file.name,
               yearMonth,
               currentUser.employeeId,
               currentUser.name
             );
         });
-        
+
         if (result.success) {
-          attachmentUrl = result.folderUrl;
-          attachmentText = result.extractedText;
+          attachmentUrls.push(result.fileUrl);
+          if (result.extractedText) {
+            attachmentTexts.push(result.extractedText);
+          }
         }
       } catch (error) {
         console.error('添付ファイル保存エラー:', error);
       }
     }
-    
+
+    // 複数URLをカンマ区切りで保存、テキストは改行区切り
     answers.push({
       questionNo: q.questionNo,
       questionTitle: q.title,
       answer: answerText,
-      attachmentUrl: attachmentUrl,
-      attachmentText: attachmentText
+      attachmentUrl: attachmentUrls.join(' , '),
+      attachmentText: attachmentTexts.join('\n\n---\n\n')
     });
   }
   
@@ -501,11 +599,7 @@ function renderReports(reports, isListMode) {
           <div class="report-question">
             <div class="report-question-title">${q.questionTitle}</div>
             <div class="report-answer">${q.answer || '（回答なし）'}</div>
-            ${q.attachmentUrl ? `
-            <div class="report-attachment">
-              <a href="${q.attachmentUrl}" target="_blank">📎 添付ファイルを開く</a>
-            </div>
-            ` : ''}
+            ${renderAttachmentLinks(q.attachmentUrl)}
           </div>
         `;
       });
@@ -531,11 +625,7 @@ function renderReports(reports, isListMode) {
           <div class="report-question">
             <div class="report-question-title">${q.questionTitle}</div>
             <div class="report-answer">${q.answer || '（回答なし）'}</div>
-            ${q.attachmentUrl ? `
-            <div class="report-attachment">
-              <a href="${q.attachmentUrl}" target="_blank">📎 添付ファイルを開く</a>
-            </div>
-            ` : ''}
+            ${renderAttachmentLinks(q.attachmentUrl)}
           </div>
         `;
       });
