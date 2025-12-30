@@ -1,18 +1,23 @@
 /**
  * ============================================
- * 月報管理システム v1.5.2
+ * 月報管理システム v1.6.0
  * ============================================
- * 
+ *
  * 【機能概要】
  * - 担当者ごとのテンプレートで月報入力
  * - 添付ファイル対応（Google Drive保存＋テキスト抽出）
  * - LINE WORKSへの自動リマインド通知
  * - 過去データ閲覧・提出状況確認
- * 
+ *
+ * 【v1.6.0 変更内容】
+ * - 過去の月報表示機能を改善
+ *   - 全員選択時: 指定年月の月報を表示（従来通り）
+ *   - 担当者個人選択時: 年月範囲（開始〜終了）を指定して過去の月報一覧を表示
+ *
  * 【v1.5.2 変更内容】
  * - 提出状況表示の問題を修正（getSubmissionStatusSimpleを使用）
  * - 対象年月を2024年4月から現在まで（新しい月は自動追加）に変更
- * 
+ *
  * 【v1.5 変更内容】
  * - 添付フォルダ名を「社員番号_氏名」形式に変更
  * - 提出済み警告・上書き確認機能を追加
@@ -486,6 +491,57 @@ function getReportsForView(yearMonth, employeeId) {
     });
   }
   
+  return Object.values(reports);
+}
+
+/**
+ * 過去の月報データを取得（年月範囲指定・担当者個人用）
+ */
+function getReportsForViewRange(yearMonthFrom, yearMonthTo, employeeId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_DATA);
+  const data = sheet.getDataRange().getValues();
+
+  const normalizedFrom = yearMonthFrom ? normalizeYearMonth(yearMonthFrom) : null;
+  const normalizedTo = yearMonthTo ? normalizeYearMonth(yearMonthTo) : null;
+  const normalizedEmployeeId = employeeId ? String(employeeId).trim() : null;
+
+  const reports = {};
+
+  for (let i = 1; i < data.length; i++) {
+    const rowYearMonth = normalizeYearMonth(data[i][1]);
+    const rowEmployeeId = String(data[i][2]).trim();
+    const rowName = data[i][3];
+    const status = data[i][9];
+
+    // 社員IDでフィルタ
+    if (normalizedEmployeeId && rowEmployeeId !== normalizedEmployeeId) continue;
+
+    // 年月範囲でフィルタ（開始〜終了）
+    if (normalizedFrom && rowYearMonth < normalizedFrom) continue;
+    if (normalizedTo && rowYearMonth > normalizedTo) continue;
+
+    // ユーザーごと・年月ごとにグループ化
+    const key = `${rowYearMonth}_${rowEmployeeId}`;
+    if (!reports[key]) {
+      reports[key] = {
+        yearMonth: rowYearMonth,
+        employeeId: rowEmployeeId,
+        name: rowName,
+        status: status,
+        questions: []
+      };
+    }
+
+    reports[key].questions.push({
+      questionNo: data[i][4],
+      questionTitle: data[i][5],
+      answer: data[i][6],
+      attachmentUrl: data[i][7],
+      attachmentText: data[i][8]
+    });
+  }
+
   return Object.values(reports);
 }
 

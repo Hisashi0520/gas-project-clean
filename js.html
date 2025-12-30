@@ -1,7 +1,12 @@
 <script>
 /**
- * 月報管理システム v1.5.2 - JavaScript
- * 
+ * 月報管理システム v1.6.0 - JavaScript
+ *
+ * 【v1.6.0 変更内容】
+ * - 過去の月報表示機能を改善
+ *   - 全員選択時: 指定年月の月報を表示（従来通り）
+ *   - 担当者個人選択時: 年月範囲（開始〜終了）を指定して過去の月報一覧を表示
+ *
  * 【v1.5.2 変更内容】
  * - 提出状況表示を getSubmissionStatusSimple に変更
  * - エラーハンドリングを強化
@@ -38,9 +43,28 @@ function showInputPage() {
 
 function showViewPage() {
   showPage('viewPage');
-  document.getElementById('viewYearMonth').innerHTML = document.getElementById('yearMonthSelect').innerHTML;
+
+  // 年月オプションをコピー
+  const monthOptions = document.getElementById('yearMonthSelect').innerHTML;
+  document.getElementById('viewYearMonth').innerHTML = monthOptions;
   document.getElementById('viewYearMonth').value = document.getElementById('yearMonthSelect').value;
-  
+
+  // 範囲指定用のセレクトボックスにもオプションをコピー
+  document.getElementById('viewYearMonthFrom').innerHTML = monthOptions;
+  document.getElementById('viewYearMonthTo').innerHTML = monthOptions;
+
+  // 範囲のデフォルト値: 開始=最も古い月、終了=最新月
+  const fromSelect = document.getElementById('viewYearMonthFrom');
+  const toSelect = document.getElementById('viewYearMonthTo');
+  if (fromSelect.options.length > 0) {
+    fromSelect.value = fromSelect.options[fromSelect.options.length - 1].value; // 最も古い月
+    toSelect.value = toSelect.options[0].value; // 最新月
+  }
+
+  // 初期状態は「全員」なので単一年月フィルタを表示
+  document.getElementById('singleMonthFilter').style.display = 'flex';
+  document.getElementById('rangeMonthFilter').style.display = 'none';
+
   google.script.run
     .withSuccessHandler(function(users) {
       const select = document.getElementById('viewUser');
@@ -51,6 +75,23 @@ function showViewPage() {
       loadReportsForView();
     })
     .getActiveUsers();
+}
+
+// 担当者選択変更時のハンドラ
+function onViewUserChange() {
+  const employeeId = document.getElementById('viewUser').value;
+
+  if (employeeId) {
+    // 担当者個人が選択された場合: 年月範囲フィルタを表示
+    document.getElementById('singleMonthFilter').style.display = 'none';
+    document.getElementById('rangeMonthFilter').style.display = 'flex';
+  } else {
+    // 全員が選択された場合: 単一年月フィルタを表示
+    document.getElementById('singleMonthFilter').style.display = 'flex';
+    document.getElementById('rangeMonthFilter').style.display = 'none';
+  }
+
+  loadReportsForView();
 }
 
 function showStatusPage() {
@@ -390,61 +431,119 @@ async function processAnswersWithAttachments(yearMonth, status) {
 
 // ===== 閲覧 =====
 function loadReportsForView() {
-  const yearMonth = document.getElementById('viewYearMonth').value;
   const employeeId = document.getElementById('viewUser').value;
-  
+
   showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(reports) {
-      hideLoading();
-      renderReports(reports);
-    })
-    .withFailureHandler(function(error) {
-      hideLoading();
-      console.error('レポート取得エラー:', error);
-    })
-    .getReportsForView(yearMonth, employeeId || null);
+
+  if (employeeId) {
+    // 担当者個人が選択された場合: 年月範囲で取得
+    const yearMonthFrom = document.getElementById('viewYearMonthFrom').value;
+    const yearMonthTo = document.getElementById('viewYearMonthTo').value;
+
+    google.script.run
+      .withSuccessHandler(function(reports) {
+        hideLoading();
+        renderReports(reports, true); // 一覧表示モード
+      })
+      .withFailureHandler(function(error) {
+        hideLoading();
+        console.error('レポート取得エラー:', error);
+      })
+      .getReportsForViewRange(yearMonthFrom, yearMonthTo, employeeId);
+  } else {
+    // 全員の場合: 単一年月で取得
+    const yearMonth = document.getElementById('viewYearMonth').value;
+
+    google.script.run
+      .withSuccessHandler(function(reports) {
+        hideLoading();
+        renderReports(reports, false); // 通常表示モード
+      })
+      .withFailureHandler(function(error) {
+        hideLoading();
+        console.error('レポート取得エラー:', error);
+      })
+      .getReportsForView(yearMonth, null);
+  }
 }
 
-function renderReports(reports) {
+function renderReports(reports, isListMode) {
   const container = document.getElementById('reportsContainer');
-  
+
   if (!reports || reports.length === 0) {
     container.innerHTML = '<p style="text-align: center; color: #666;">該当する月報がありません</p>';
     return;
   }
-  
+
   let html = '';
-  reports.forEach(report => {
-    const statusClass = report.status === '提出済' ? 'status-submitted' : 'status-draft';
-    
-    html += `
-      <div class="report-card">
-        <div class="report-header">
-          <h3>${report.name} - ${report.yearMonth}</h3>
-          <span class="status-badge ${statusClass}">${report.status}</span>
-        </div>
-        <div class="report-body">
-    `;
-    
-    report.questions.forEach(q => {
+
+  if (isListMode) {
+    // 担当者個人の一覧表示モード: 年月でソートして表示
+    // 年月の新しい順にソート
+    reports.sort((a, b) => b.yearMonth.localeCompare(a.yearMonth));
+
+    html += `<p style="margin-bottom: 16px; color: #666;">該当期間の月報: <strong>${reports.length}</strong> 件</p>`;
+
+    reports.forEach(report => {
+      const statusClass = report.status === '提出済' ? 'status-submitted' : 'status-draft';
+
       html += `
-        <div class="report-question">
-          <div class="report-question-title">${q.questionTitle}</div>
-          <div class="report-answer">${q.answer || '（回答なし）'}</div>
-          ${q.attachmentUrl ? `
-          <div class="report-attachment">
-            <a href="${q.attachmentUrl}" target="_blank">📎 添付ファイルを開く</a>
+        <div class="report-card">
+          <div class="report-header">
+            <h3>${report.yearMonth}</h3>
+            <span class="status-badge ${statusClass}">${report.status}</span>
           </div>
-          ` : ''}
-        </div>
+          <div class="report-body">
       `;
+
+      report.questions.forEach(q => {
+        html += `
+          <div class="report-question">
+            <div class="report-question-title">${q.questionTitle}</div>
+            <div class="report-answer">${q.answer || '（回答なし）'}</div>
+            ${q.attachmentUrl ? `
+            <div class="report-attachment">
+              <a href="${q.attachmentUrl}" target="_blank">📎 添付ファイルを開く</a>
+            </div>
+            ` : ''}
+          </div>
+        `;
+      });
+
+      html += '</div></div>';
     });
-    
-    html += '</div></div>';
-  });
-  
+  } else {
+    // 全員表示モード: 従来通り
+    reports.forEach(report => {
+      const statusClass = report.status === '提出済' ? 'status-submitted' : 'status-draft';
+
+      html += `
+        <div class="report-card">
+          <div class="report-header">
+            <h3>${report.name} - ${report.yearMonth}</h3>
+            <span class="status-badge ${statusClass}">${report.status}</span>
+          </div>
+          <div class="report-body">
+      `;
+
+      report.questions.forEach(q => {
+        html += `
+          <div class="report-question">
+            <div class="report-question-title">${q.questionTitle}</div>
+            <div class="report-answer">${q.answer || '（回答なし）'}</div>
+            ${q.attachmentUrl ? `
+            <div class="report-attachment">
+              <a href="${q.attachmentUrl}" target="_blank">📎 添付ファイルを開く</a>
+            </div>
+            ` : ''}
+          </div>
+        `;
+      });
+
+      html += '</div></div>';
+    });
+  }
+
   container.innerHTML = html;
 }
 
