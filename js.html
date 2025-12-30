@@ -1,0 +1,533 @@
+<script>
+/**
+ * 月報管理システム v1.5.2 - JavaScript
+ * 
+ * 【v1.5.2 変更内容】
+ * - 提出状況表示を getSubmissionStatusSimple に変更
+ * - エラーハンドリングを強化
+ */
+
+// グローバル変数
+let currentUser = null;
+let currentTemplate = [];
+let attachmentData = {};
+let currentReportStatus = null;
+
+// ===== 初期化 =====
+document.addEventListener('DOMContentLoaded', function() {
+  loadUsers();
+  loadMonthOptions();
+});
+
+// ===== ページ切り替え =====
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(page => {
+    page.classList.remove('active');
+  });
+  document.getElementById(pageId).classList.add('active');
+}
+
+function showMainPage() {
+  showPage('mainPage');
+}
+
+function showInputPage() {
+  showPage('inputPage');
+  loadTemplate();
+}
+
+function showViewPage() {
+  showPage('viewPage');
+  document.getElementById('viewYearMonth').innerHTML = document.getElementById('yearMonthSelect').innerHTML;
+  document.getElementById('viewYearMonth').value = document.getElementById('yearMonthSelect').value;
+  
+  google.script.run
+    .withSuccessHandler(function(users) {
+      const select = document.getElementById('viewUser');
+      select.innerHTML = '<option value="">全員</option>';
+      users.forEach(user => {
+        select.innerHTML += `<option value="${user.employeeId}">${user.name}</option>`;
+      });
+      loadReportsForView();
+    })
+    .getActiveUsers();
+}
+
+function showStatusPage() {
+  showPage('statusPage');
+  document.getElementById('statusYearMonth').innerHTML = document.getElementById('yearMonthSelect').innerHTML;
+  document.getElementById('statusYearMonth').value = document.getElementById('yearMonthSelect').value;
+  loadSubmissionStatus();
+}
+
+// ===== ローディング =====
+function showLoading() {
+  document.getElementById('loading').classList.add('active');
+}
+
+function hideLoading() {
+  document.getElementById('loading').classList.remove('active');
+}
+
+// ===== ユーザー関連 =====
+function loadUsers() {
+  google.script.run
+    .withSuccessHandler(function(users) {
+      const select = document.getElementById('userSelect');
+      users.forEach(user => {
+        select.innerHTML += `<option value="${user.employeeId}">${user.name}</option>`;
+      });
+    })
+    .withFailureHandler(function(error) {
+      console.error('ユーザー取得エラー:', error);
+    })
+    .getActiveUsers();
+}
+
+function login() {
+  const employeeId = document.getElementById('userSelect').value;
+  const password = document.getElementById('password').value;
+  
+  if (!employeeId) {
+    document.getElementById('loginError').textContent = '名前を選択してください';
+    return;
+  }
+  
+  if (!password || password.length !== 4) {
+    document.getElementById('loginError').textContent = 'パスワードは4桁の数字で入力してください';
+    return;
+  }
+  
+  showLoading();
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      hideLoading();
+      if (result.success) {
+        currentUser = result.user;
+        document.getElementById('currentUserName').textContent = currentUser.name + ' さん';
+        document.getElementById('loginError').textContent = '';
+        showPage('mainPage');
+      } else {
+        document.getElementById('loginError').textContent = result.message;
+      }
+    })
+    .withFailureHandler(function(error) {
+      hideLoading();
+      document.getElementById('loginError').textContent = 'ログインに失敗しました';
+      console.error('ログインエラー:', error);
+    })
+    .authenticate(employeeId, password);
+}
+
+function logout() {
+  currentUser = null;
+  currentTemplate = [];
+  attachmentData = {};
+  currentReportStatus = null;
+  document.getElementById('password').value = '';
+  showPage('loginPage');
+}
+
+// ===== 年月選択 =====
+function loadMonthOptions() {
+  google.script.run
+    .withSuccessHandler(function(months) {
+      const selects = ['yearMonthSelect', 'viewYearMonth', 'statusYearMonth'];
+      selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if (select) {
+          select.innerHTML = '';
+          months.forEach(month => {
+            select.innerHTML += `<option value="${month}">${month}</option>`;
+          });
+        }
+      });
+    })
+    .getAvailableMonths();
+}
+
+// ===== テンプレート・入力 =====
+function loadTemplate() {
+  if (!currentUser) return;
+  
+  const yearMonth = document.getElementById('yearMonthSelect').value;
+  document.getElementById('inputPageTitle').textContent = yearMonth + ' 月報入力';
+  
+  showLoading();
+  
+  google.script.run
+    .withSuccessHandler(function(statusResult) {
+      currentReportStatus = statusResult;
+      showStatusWarning(statusResult, yearMonth);
+      
+      google.script.run
+        .withSuccessHandler(function(template) {
+          currentTemplate = template;
+          
+          google.script.run
+            .withSuccessHandler(function(existingData) {
+              hideLoading();
+              renderQuestions(template, existingData);
+            })
+            .withFailureHandler(function(error) {
+              hideLoading();
+              renderQuestions(template, []);
+            })
+            .getReportData(currentUser.employeeId, yearMonth);
+        })
+        .withFailureHandler(function(error) {
+          hideLoading();
+          console.error('テンプレート取得エラー:', error);
+          alert('テンプレートの取得に失敗しました');
+        })
+        .getTemplate(currentUser.templateId);
+    })
+    .withFailureHandler(function(error) {
+      currentReportStatus = { hasData: false, isSubmitted: false };
+      hideStatusWarning();
+      
+      google.script.run
+        .withSuccessHandler(function(template) {
+          currentTemplate = template;
+          google.script.run
+            .withSuccessHandler(function(existingData) {
+              hideLoading();
+              renderQuestions(template, existingData);
+            })
+            .withFailureHandler(function(error) {
+              hideLoading();
+              renderQuestions(template, []);
+            })
+            .getReportData(currentUser.employeeId, yearMonth);
+        })
+        .withFailureHandler(function(error) {
+          hideLoading();
+          alert('テンプレートの取得に失敗しました');
+        })
+        .getTemplate(currentUser.templateId);
+    })
+    .getReportStatus(currentUser.employeeId, yearMonth);
+}
+
+function showStatusWarning(statusResult, yearMonth) {
+  let warningDiv = document.getElementById('statusWarning');
+  
+  if (!warningDiv) {
+    warningDiv = document.createElement('div');
+    warningDiv.id = 'statusWarning';
+    const form = document.getElementById('reportForm');
+    form.parentNode.insertBefore(warningDiv, form);
+  }
+  
+  if (statusResult.isSubmitted) {
+    warningDiv.innerHTML = `
+      <div class="warning-box warning-submitted">
+        <strong>⚠️ この月は既に提出済みです</strong><br>
+        ${yearMonth} の月報は提出済みです。編集して再提出すると、前回の内容は上書きされます。
+      </div>
+    `;
+    warningDiv.style.display = 'block';
+  } else if (statusResult.hasData) {
+    warningDiv.innerHTML = `
+      <div class="warning-box warning-draft">
+        <strong>📝 下書きがあります</strong><br>
+        ${yearMonth} の月報には保存済みの下書きがあります。
+      </div>
+    `;
+    warningDiv.style.display = 'block';
+  } else {
+    warningDiv.style.display = 'none';
+  }
+}
+
+function hideStatusWarning() {
+  const warningDiv = document.getElementById('statusWarning');
+  if (warningDiv) {
+    warningDiv.style.display = 'none';
+  }
+}
+
+function renderQuestions(template, existingData) {
+  const container = document.getElementById('questionsContainer');
+  container.innerHTML = '';
+  attachmentData = {};
+  
+  template.forEach((q, index) => {
+    const existingAnswer = existingData.find(d => d.questionNo === q.questionNo);
+    
+    const html = `
+      <div class="question-item">
+        <div class="question-title">${q.title}</div>
+        <div class="question-description">${q.description}</div>
+        
+        <div class="form-group">
+          <label>回答</label>
+          <textarea id="answer_${index}" placeholder="内容を入力してください。">${existingAnswer ? existingAnswer.answer : ''}</textarea>
+        </div>
+        
+        ${q.allowAttachment ? `
+        <div class="file-upload">
+          <input type="file" id="file_${index}" onchange="handleFileSelect(${index}, this)">
+          <label for="file_${index}">📎 ファイルを添付する</label>
+          <div class="file-name" id="fileName_${index}">${existingAnswer && existingAnswer.attachmentUrl ? '添付済み: ' + existingAnswer.attachmentUrl : ''}</div>
+        </div>
+        ` : ''}
+      </div>
+    `;
+    
+    container.innerHTML += html;
+  });
+}
+
+function handleFileSelect(index, input) {
+  const file = input.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const base64 = e.target.result.split(',')[1];
+      attachmentData[index] = {
+        data: base64,
+        name: file.name
+      };
+      document.getElementById('fileName_' + index).textContent = '選択中: ' + file.name;
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+// ===== 保存・提出 =====
+function saveDraft() {
+  saveReport('下書き');
+}
+
+function submitReport() {
+  if (currentReportStatus && currentReportStatus.isSubmitted) {
+    if (!confirm('⚠️ この月報は既に提出済みです。\n\n上書きして再提出しますか？\n（前回の内容は上書きされます）')) {
+      return;
+    }
+  } else {
+    if (!confirm('月報を提出しますか？')) {
+      return;
+    }
+  }
+  
+  saveReport('提出済');
+}
+
+function saveReport(status) {
+  const yearMonth = document.getElementById('yearMonthSelect').value;
+  showLoading();
+  processAnswersWithAttachments(yearMonth, status);
+}
+
+async function processAnswersWithAttachments(yearMonth, status) {
+  const answers = [];
+  
+  for (let i = 0; i < currentTemplate.length; i++) {
+    const q = currentTemplate[i];
+    const answerText = document.getElementById('answer_' + i).value;
+    
+    let attachmentUrl = '';
+    let attachmentText = '';
+    
+    if (attachmentData[i]) {
+      try {
+        const result = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .saveAttachment(
+              attachmentData[i].data,
+              attachmentData[i].name,
+              yearMonth,
+              currentUser.employeeId,
+              currentUser.name
+            );
+        });
+        
+        if (result.success) {
+          attachmentUrl = result.folderUrl;
+          attachmentText = result.extractedText;
+        }
+      } catch (error) {
+        console.error('添付ファイル保存エラー:', error);
+      }
+    }
+    
+    answers.push({
+      questionNo: q.questionNo,
+      questionTitle: q.title,
+      answer: answerText,
+      attachmentUrl: attachmentUrl,
+      attachmentText: attachmentText
+    });
+  }
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      hideLoading();
+      if (result.success) {
+        alert(result.message);
+        showMainPage();
+      } else {
+        alert('保存に失敗しました');
+      }
+    })
+    .withFailureHandler(function(error) {
+      hideLoading();
+      alert('保存に失敗しました');
+      console.error('保存エラー:', error);
+    })
+    .saveReport({
+      yearMonth: yearMonth,
+      employeeId: currentUser.employeeId,
+      userName: currentUser.name,
+      status: status,
+      answers: answers
+    });
+}
+
+// ===== 閲覧 =====
+function loadReportsForView() {
+  const yearMonth = document.getElementById('viewYearMonth').value;
+  const employeeId = document.getElementById('viewUser').value;
+  
+  showLoading();
+  
+  google.script.run
+    .withSuccessHandler(function(reports) {
+      hideLoading();
+      renderReports(reports);
+    })
+    .withFailureHandler(function(error) {
+      hideLoading();
+      console.error('レポート取得エラー:', error);
+    })
+    .getReportsForView(yearMonth, employeeId || null);
+}
+
+function renderReports(reports) {
+  const container = document.getElementById('reportsContainer');
+  
+  if (!reports || reports.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: #666;">該当する月報がありません</p>';
+    return;
+  }
+  
+  let html = '';
+  reports.forEach(report => {
+    const statusClass = report.status === '提出済' ? 'status-submitted' : 'status-draft';
+    
+    html += `
+      <div class="report-card">
+        <div class="report-header">
+          <h3>${report.name} - ${report.yearMonth}</h3>
+          <span class="status-badge ${statusClass}">${report.status}</span>
+        </div>
+        <div class="report-body">
+    `;
+    
+    report.questions.forEach(q => {
+      html += `
+        <div class="report-question">
+          <div class="report-question-title">${q.questionTitle}</div>
+          <div class="report-answer">${q.answer || '（回答なし）'}</div>
+          ${q.attachmentUrl ? `
+          <div class="report-attachment">
+            <a href="${q.attachmentUrl}" target="_blank">📎 添付ファイルを開く</a>
+          </div>
+          ` : ''}
+        </div>
+      `;
+    });
+    
+    html += '</div></div>';
+  });
+  
+  container.innerHTML = html;
+}
+
+// ===== 提出状況 =====
+function loadSubmissionStatus() {
+  const yearMonth = document.getElementById('statusYearMonth').value;
+  const container = document.getElementById('statusContainer');
+  
+  // ローディング表示
+  container.innerHTML = '<p style="text-align: center; color: #666;">読み込み中...</p>';
+  
+  google.script.run
+    .withSuccessHandler(function(statusList) {
+      console.log('提出状況データ受信:', statusList);
+      renderSubmissionStatus(statusList);
+    })
+    .withFailureHandler(function(error) {
+      console.error('提出状況取得エラー:', error);
+      container.innerHTML = '<p style="text-align: center; color: #d93025;">データの取得に失敗しました。<br>ページを再読み込みしてください。</p>';
+    })
+    .getSubmissionStatusSimple(yearMonth);
+}
+
+function renderSubmissionStatus(statusList) {
+  const container = document.getElementById('statusContainer');
+  
+  // データがない場合
+  if (!statusList || !Array.isArray(statusList)) {
+    console.error('statusListが無効:', statusList);
+    container.innerHTML = '<p style="text-align: center; color: #d93025;">データの形式が不正です。</p>';
+    return;
+  }
+  
+  if (statusList.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: #666;">ユーザーが登録されていません。</p>';
+    return;
+  }
+  
+  let submittedCount = 0;
+  statusList.forEach(s => {
+    if (s.status === '提出済') {
+      submittedCount++;
+    }
+  });
+  
+  let totalCount = statusList.length;
+  
+  let html = `
+    <p style="margin-bottom: 16px;">提出済: <strong>${submittedCount}</strong> / ${totalCount} 名</p>
+    <table class="status-table">
+      <thead>
+        <tr>
+          <th>名前</th>
+          <th>状況</th>
+          <th>提出日時</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  
+  statusList.forEach(s => {
+    const statusClass = s.status === '提出済' ? 'status-submitted' : 'status-pending';
+    let submittedAt = '-';
+    
+    if (s.submittedAt) {
+      try {
+        submittedAt = new Date(s.submittedAt).toLocaleString('ja-JP');
+      } catch (e) {
+        submittedAt = String(s.submittedAt);
+      }
+    }
+    
+    html += `
+      <tr>
+        <td>${s.name || '（名前なし）'}</td>
+        <td><span class="status-badge ${statusClass}">${s.status || '不明'}</span></td>
+        <td>${submittedAt}</td>
+      </tr>
+    `;
+  });
+  
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+</script>
+

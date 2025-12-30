@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('css'); ?>
+</head>
+<body>
+  <div class="container">
+    
+    <!-- ログイン画面 -->
+    <div id="loginPage" class="page active">
+      <div class="card login-card">
+        <h1>📝 月報管理システム</h1>
+        <p class="subtitle">業務報告書の入力・管理</p>
+        
+        <div class="form-group">
+          <label>名前を選択</label>
+          <select id="userSelect">
+            <option value="">-- 選択してください --</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>パスワード（4桁）</label>
+          <input type="password" id="password" maxlength="4" pattern="[0-9]{4}" placeholder="数字4桁">
+        </div>
+        
+        <div id="loginError" class="error-message"></div>
+        
+        <button id="loginBtn" class="btn btn-primary" onclick="login()">ログイン</button>
+      </div>
+    </div>
+    
+    <!-- メイン画面 -->
+    <div id="mainPage" class="page">
+      <div class="header">
+        <h2>📝 月報管理システム</h2>
+        <div class="user-info">
+          <span id="currentUserName"></span>
+          <button class="btn btn-small" onclick="logout()">ログアウト</button>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="form-group">
+          <label>対象年月</label>
+          <select id="yearMonthSelect"></select>
+        </div>
+        
+        <div class="menu-buttons">
+          <button class="btn btn-primary btn-large" onclick="showInputPage()">
+            📝 月報を入力する
+          </button>
+          <button class="btn btn-secondary btn-large" onclick="showViewPage()">
+            📖 過去の月報を見る
+          </button>
+          <button class="btn btn-secondary btn-large" onclick="showStatusPage()">
+            📊 提出状況を見る
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 入力画面 -->
+    <div id="inputPage" class="page">
+      <div class="header">
+        <button class="btn btn-back" onclick="showMainPage()">← 戻る</button>
+        <h2 id="inputPageTitle">月報入力</h2>
+      </div>
+      
+      <div class="card">
+        <p class="note">※報告が無い場合は『特になし』と記入してください</p>
+        
+        <form id="reportForm">
+          <div id="questionsContainer"></div>
+          
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" onclick="saveDraft()">下書き保存</button>
+            <button type="button" class="btn btn-primary" onclick="submitReport()">提出する</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 閲覧画面 -->
+    <div id="viewPage" class="page">
+      <div class="header">
+        <button class="btn btn-back" onclick="showMainPage()">← 戻る</button>
+        <h2>過去の月報を見る</h2>
+      </div>
+      
+      <div class="card">
+        <div class="filter-row">
+          <div class="form-group">
+            <label>年月</label>
+            <select id="viewYearMonth" onchange="loadReportsForView()"></select>
+          </div>
+          <div class="form-group">
+            <label>担当者</label>
+            <select id="viewUser" onchange="loadReportsForView()">
+              <option value="">全員</option>
+            </select>
+          </div>
+        </div>
+        
+        <div id="reportsContainer"></div>
+      </div>
+    </div>
+    
+    <!-- 提出状況画面 -->
+    <div id="statusPage" class="page">
+      <div class="header">
+        <button class="btn btn-back" onclick="showMainPage()">← 戻る</button>
+        <h2>提出状況</h2>
+      </div>
+      
+      <div class="card">
+        <div class="form-group">
+          <label>年月</label>
+          <select id="statusYearMonth" onchange="loadSubmissionStatus()"></select>
+        </div>
+        
+        <div id="statusContainer"></div>
+      </div>
+    </div>
+    
+    <!-- ローディング -->
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>処理中...</p>
+    </div>
+    
+  </div>
+  
+  <?!= include('js'); ?>
+</body>
+</html>

@@ -1,0 +1,447 @@
+<style>
+/**
+ * 月報管理システム v1.5 - スタイルシート
+ * 
+ * 【v1.5 変更内容】
+ * - 警告ボックスのスタイルを追加（提出済み/下書き）
+ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ページ切り替え */
+.page {
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+/* カード */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.login-card {
+  max-width: 400px;
+  margin: 80px auto;
+  text-align: center;
+}
+
+.login-card h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+  color: #1a73e8;
+}
+
+.login-card .subtitle {
+  color: #666;
+  margin-bottom: 32px;
+}
+
+/* ヘッダー */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.header h2 {
+  font-size: 20px;
+  color: #333;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-info span {
+  font-weight: bold;
+  color: #1a73e8;
+}
+
+/* フォーム要素 */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #444;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26,115,232,0.1);
+}
+
+.form-group textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+/* ボタン */
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: #1a73e8;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #1557b0;
+}
+
+.btn-secondary {
+  background: #f1f3f4;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #e8eaeb;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.btn-large {
+  width: 100%;
+  padding: 16px;
+  font-size: 18px;
+}
+
+.btn-back {
+  background: none;
+  color: #1a73e8;
+  padding: 8px 0;
+}
+
+.btn-back:hover {
+  text-decoration: underline;
+}
+
+/* メニューボタン */
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* エラーメッセージ */
+.error-message {
+  color: #d93025;
+  font-size: 14px;
+  margin: 12px 0;
+}
+
+/* 注意書き */
+.note {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: #856404;
+}
+
+/* v1.5: 警告ボックス（提出済み/下書き） */
+.warning-box {
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.warning-submitted {
+  background: #fce8e6;
+  border: 1px solid #f5c6cb;
+  color: #c5221f;
+}
+
+.warning-draft {
+  background: #e8f0fe;
+  border: 1px solid #4285f4;
+  color: #1a73e8;
+}
+
+/* 質問項目 */
+.question-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.question-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #1a73e8;
+  margin-bottom: 8px;
+}
+
+.question-description {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 16px;
+  white-space: pre-line;
+}
+
+/* ファイル添付 */
+.file-upload {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fff;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.file-upload input[type="file"] {
+  display: none;
+}
+
+.file-upload label {
+  cursor: pointer;
+  color: #1a73e8;
+}
+
+.file-upload label:hover {
+  text-decoration: underline;
+}
+
+.file-name {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+/* フォームアクション */
+.form-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* フィルター行 */
+.filter-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.filter-row .form-group {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+/* レポート表示 */
+.report-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.report-header {
+  background: #f8f9fa;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.report-header h3 {
+  font-size: 16px;
+  color: #333;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.status-submitted {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.status-draft {
+  background: #fef7e0;
+  color: #b06000;
+}
+
+.status-pending {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+.report-body {
+  padding: 16px;
+}
+
+.report-question {
+  margin-bottom: 16px;
+}
+
+.report-question:last-child {
+  margin-bottom: 0;
+}
+
+.report-question-title {
+  font-weight: bold;
+  color: #444;
+  margin-bottom: 8px;
+}
+
+.report-answer {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+
+.report-attachment {
+  margin-top: 8px;
+}
+
+.report-attachment a {
+  color: #1a73e8;
+  font-size: 14px;
+}
+
+/* 提出状況テーブル */
+.status-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.status-table th,
+.status-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.status-table th {
+  background: #f8f9fa;
+  font-weight: bold;
+}
+
+/* ローディング */
+.loading {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255,255,255,0.9);
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  z-index: 1000;
+}
+
+.loading.active {
+  display: flex;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #1a73e8;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* レスポンシブ */
+@media (max-width: 600px) {
+  .container {
+    padding: 12px;
+  }
+  
+  .card {
+    padding: 16px;
+  }
+  
+  .filter-row {
+    flex-direction: column;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
+  
+  .form-actions .btn {
+    width: 100%;
+  }
+}
+</style>
